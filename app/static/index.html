@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HotelOps — Site Reliability Monitoring System</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <div class="brand">
+                    <span class="brand-icon">🏨</span>
+                    <div>
+                        <h1 class="brand-title">HotelOps</h1>
+                        <p class="brand-subtitle">Site Reliability Engineering & Service Telemetry</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="header-right">
+                <div class="status-indicator-badge" id="overallStatusBadge">
+                    <span class="status-dot healthy" id="statusDot"></span>
+                    <span id="overallStatusText">CHECKING...</span>
+                </div>
+                <div class="env-pill">
+                    <span class="pill-dot"></span>
+                    <span>DEMO MODE ACTIVE</span>
+                </div>
+                <div class="refresh-control">
+                    <button id="manualRefreshBtn" class="btn-icon" title="Refresh metrics">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.19"/>
+                        </svg>
+                    </button>
+                    <span class="refresh-timer" id="refreshTimer">5s</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Notification Banner -->
+        <div id="alertBanner" class="alert-banner hidden">
+            <span class="alert-icon">⚠️</span>
+            <div class="alert-content">
+                <strong id="alertTitle">Simulated Incident Active</strong>
+                <p id="alertMessage">High error rate detected in recent requests.</p>
+            </div>
+            <button class="alert-close" id="closeAlertBtn">&times;</button>
+        </div>
+
+        <!-- Metrics Grid -->
+        <section class="metrics-grid">
+            <!-- Card 1: System Health -->
+            <div class="metric-card">
+                <div class="card-header">
+                    <span class="card-label">SERVICE HEALTH</span>
+                    <span class="card-tag" id="probeStatusTag">PROBES OK</span>
+                </div>
+                <div class="card-value-group">
+                    <div class="primary-metric" id="cardHealthStatus">Healthy</div>
+                    <div class="sub-metric">
+                        <span>DB Probe: <strong id="cardDbStatus" class="text-success">Connected</strong></span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span>Liveness: /health</span>
+                    <span>Readiness: /ready</span>
+                </div>
+            </div>
+
+            <!-- Card 2: Process Uptime -->
+            <div class="metric-card">
+                <div class="card-header">
+                    <span class="card-label">PROCESS UPTIME</span>
+                    <span class="card-tag">LOCAL</span>
+                </div>
+                <div class="card-value-group">
+                    <div class="primary-metric font-mono" id="cardUptime">0h 00m 00s</div>
+                    <div class="sub-metric">
+                        <span id="cardUptimeSeconds">0s total</span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span>Scope: Process-local worker</span>
+                </div>
+            </div>
+
+            <!-- Card 3: Total Requests -->
+            <div class="metric-card">
+                <div class="card-header">
+                    <span class="card-label">TOTAL REQUESTS</span>
+                    <span class="card-tag">HTTP</span>
+                </div>
+                <div class="card-value-group">
+                    <div class="primary-metric font-mono" id="cardTotalRequests">0</div>
+                    <div class="sub-metric">
+                        <span class="text-success">2xx/3xx: <strong id="cardSuccessRequests">0</strong></span>
+                        <span class="text-danger">Failed: <strong id="cardFailedRequests">0</strong></span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span>All observed HTTP transactions</span>
+                </div>
+            </div>
+
+            <!-- Card 4: Average Latency -->
+            <div class="metric-card">
+                <div class="card-header">
+                    <span class="card-label">AVG LATENCY</span>
+                    <span class="card-tag">P50 / P95</span>
+                </div>
+                <div class="card-value-group">
+                    <div class="primary-metric font-mono" id="cardAvgLatency">0.00 ms</div>
+                    <div class="sub-metric">
+                        <span>p95 Latency: <strong id="cardP95Latency" class="font-mono">0.00 ms</strong></span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span>Measured via ASGI middleware</span>
+                </div>
+            </div>
+
+            <!-- Card 5: Error Rate -->
+            <div class="metric-card">
+                <div class="card-header">
+                    <span class="card-label">ERROR RATE</span>
+                    <span class="card-tag" id="errorRateTag">NORMAL</span>
+                </div>
+                <div class="card-value-group">
+                    <div class="primary-metric font-mono" id="cardErrorRate">0.0%</div>
+                    <div class="sub-metric">
+                        <span>4xx: <strong id="card4xxRequests">0</strong></span>
+                        <span>5xx: <strong id="card5xxRequests">0</strong></span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span id="errorRateSLO">SLO Target: &lt; 1.0%</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- SRE Interactive Control & Fault Injection -->
+        <section class="control-panel">
+            <div class="panel-header">
+                <div>
+                    <h2>SRE Chaos & Testing Workbench</h2>
+                    <p>Trigger synthetic transactions to verify live telemetry, error tracking, and transactional conflict handling.</p>
+                </div>
+            </div>
+            <div class="button-row">
+                <button class="btn btn-danger" id="simulateErrorBtn">
+                    <span>💥</span> Simulate 500 Incident
+                </button>
+                <button class="btn btn-primary" id="createBookingBtn">
+                    <span>🏨</span> Create Test Booking
+                </button>
+                <button class="btn btn-warning" id="triggerConflictBtn">
+                    <span>⚠️</span> Trigger 409 Conflict
+                </button>
+                <button class="btn btn-secondary" id="runHealthProbeBtn">
+                    <span>🩺</span> Probe Probes Now
+                </button>
+            </div>
+            <div id="actionFeedback" class="action-feedback hidden"></div>
+        </section>
+
+        <!-- Middle Section: Visual Charts and Status Distribution -->
+        <section class="analytics-row">
+            <!-- Left: Latency Sparkline Trend -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Recent Request Latency Trend</h3>
+                    <span class="chart-legend">Last 20 requests (ms)</span>
+                </div>
+                <div class="sparkline-wrapper" id="latencyBarsContainer">
+                    <!-- Populated dynamically by JS -->
+                </div>
+            </div>
+
+            <!-- Right: Status Code Distribution Breakdown -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Status Code Distribution</h3>
+                    <span class="chart-legend">HTTP Responses</span>
+                </div>
+                <div class="distribution-bar-wrapper">
+                    <div class="distribution-bar">
+                        <div class="dist-segment dist-2xx" id="dist2xx" style="width: 100%;"></div>
+                        <div class="dist-segment dist-4xx" id="dist4xx" style="width: 0%;"></div>
+                        <div class="dist-segment dist-5xx" id="dist5xx" style="width: 0%;"></div>
+                    </div>
+                    <div class="dist-labels">
+                        <span class="dist-legend-item"><span class="legend-color legend-2xx"></span> 2xx/3xx Success (<span id="dist2xxPct">100%</span>)</span>
+                        <span class="dist-legend-item"><span class="legend-color legend-4xx"></span> 4xx Client Error (<span id="dist4xxPct">0%</span>)</span>
+                        <span class="dist-legend-item"><span class="legend-color legend-5xx"></span> 5xx Server Outage (<span id="dist5xxPct">0%</span>)</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Live Telemetry Stream Table -->
+        <section class="table-section">
+            <div class="table-header">
+                <div>
+                    <h2>Live HTTP Transaction Stream</h2>
+                    <p>Real-time ASGI telemetry captured by observability middleware and written to <code>logs/app.log</code></p>
+                </div>
+                <div class="table-meta">
+                    <span id="streamCounter">Showing latest 0 requests</span>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>TIMESTAMP (UTC)</th>
+                            <th>METHOD</th>
+                            <th>ENDPOINT</th>
+                            <th>STATUS</th>
+                            <th>LATENCY</th>
+                            <th>CLIENT IP</th>
+                        </tr>
+                    </thead>
+                    <tbody id="telemetryTableBody">
+                        <tr>
+                            <td colspan="6" class="text-center text-muted">Awaiting incoming telemetry...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- SRE Transparency & Interview Architecture Note -->
+        <footer class="app-footer">
+            <div class="footer-card">
+                <h4>📐 SRE Architectural Transparency Note</h4>
+                <p>
+                    <strong>Process-Local Scope:</strong> These metrics reflect the running worker process since startup. In production SRE architectures, this in-memory collector would be exposed as a <code>/metrics</code> Prometheus exposition endpoint, scraped by Prometheus server agents across all scaled replicas, and aggregated inside Grafana with alerting rules routed through Alertmanager / PagerDuty.
+                </p>
+                <div class="footer-links">
+                    <a href="/metrics-summary" target="_blank" class="footer-link">View Raw /metrics-summary JSON</a>
+                    <a href="/docs" target="_blank" class="footer-link">Interactive Swagger Docs</a>
+                    <a href="/health" target="_blank" class="footer-link">Liveness Probe</a>
+                    <a href="/ready" target="_blank" class="footer-link">Readiness Probe</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/dashboard.js"></script>
+</body>
+</html>
