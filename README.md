@@ -129,6 +129,12 @@ python -m pytest tests/test_api.py -v
 ```
 *Expected output: `11 passed`.*
 
+You can also run the full end-to-end system verification script which spins up the server on a free port, runs live HTTP checks, and cleans up automatically:
+```powershell
+python verify_system.py
+```
+*Expected output: `13 PASSED, 0 FAILED`.*
+
 ### Step 4: Start the HotelOps API Server
 In **Terminal Window 1**, start the FastAPI server:
 ```powershell
@@ -281,6 +287,28 @@ When taking screenshots for your GitHub portfolio or LinkedIn post, capture thes
   ```powershell
   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
   ```
+
+---
+
+## ⚖️ System Limitations & Engineering Tradeoffs
+
+Honesty and technical self-awareness are foundational Site Reliability Engineering traits. Here are the deliberate design tradeoffs in HotelOps:
+
+1. **Process-Local Metrics Scope:**
+   * *Tradeoff:* Telemetry is stored in-memory using Python's `threading.Lock` and circular buffers (`collections.deque`).
+   * *Limitation:* Metrics reset whenever the server process restarts and reflect only that single worker.
+   * *Production Evolution:* In a multi-replica Kubernetes cluster, each worker would expose standard Prometheus `/metrics` exposition format, scraped by Prometheus server agents and visualized holistically across pods in Grafana.
+2. **Single-Node SQLite Storage:**
+   * *Tradeoff:* SQLite was chosen for zero-dependency simplicity and transactional ACID compliance (`BEGIN IMMEDIATE`).
+   * *Limitation:* SQLite uses file-level locking, which can cause contention under high concurrent writes across multiple worker processes.
+   * *Production Evolution:* A distributed hospitality reservation platform would use PostgreSQL with row-level locks (`SELECT ... FOR UPDATE`) or CockroachDB for multi-region active-active replication.
+3. **Polling vs. Event-Driven Alerting:**
+   * *Tradeoff:* `monitor.py` uses HTTP polling every 3 seconds for lightweight, local out-of-process monitoring.
+   * *Limitation:* Polling introduces a detection delay equal to the polling interval (up to 3 seconds) and consumes minor network overhead.
+   * *Production Evolution:* Production SRE stacks employ OpenTelemetry instrumentation with streaming spans and Alertmanager webhooks routed into PagerDuty/Opsgenie.
+4. **Synthetic Fault Injection Scope:**
+   * *Tradeoff:* `/api/demo/simulate-500` provides an easy, self-contained way to verify 5xx detection and error-rate alerting without third-party chaos frameworks.
+   * *Limitation:* It simulates application-level failures only, not kernel panics, CPU throttling, or network partitions.
 
 ---
 
